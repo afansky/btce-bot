@@ -85,7 +85,7 @@ def run(database_path):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Simple range trader example.')
-    parser.add_argument('--db-path', default='btce.db',
+    parser.add_argument('--db-path', default='btce.sqlite',
                         help='Path to the logger database.')
 
     args = parser.parse_args()
