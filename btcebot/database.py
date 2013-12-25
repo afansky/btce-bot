@@ -5,6 +5,7 @@ import datetime
 import decimal
 import os.path
 import sqlite3
+import time
 
 import btceapi
 from btceapi.public import Trade
@@ -74,16 +75,16 @@ class MarketDatabase(object):
                 tid INT PRIMARY KEY,
                 pair INT,
                 trade_type INT,
-                price DECIMAL,
-                amount DECIMAL,
-                date TIMESTAMP,
+                price REAL,
+                amount REAL,
+                date DATETIME,
                 FOREIGN KEY(pair) REFERENCES pairs(id),
                 FOREIGN KEY(trade_type) REFERENCES trade_types(id)
             );''')
 
         self.cursor.execute('''
             CREATE TABLE depth(
-                date TIMESTAMP,
+                date DATETIME,
                 pair INT,
                 asks BLOB,
                 bids BLOB,
@@ -92,12 +93,12 @@ class MarketDatabase(object):
 
         self.cursor.execute('''
             CREATE TABLE ticks(
-                date TIMESTAMP,
+                date DATETIME,
                 pair INT,
-                ask_price DECIMAL,
-                ask_volume DECIMAL,
-                bid_price DECIMAL,
-                bid_volume DECIMAL,
+                ask_price REAL,
+                ask_volume REAL,
+                bid_price REAL,
+                bid_volume REAL,
                 FOREIGN KEY(pair) REFERENCES pairs(id)
         );''')
 
@@ -155,9 +156,9 @@ class MarketDatabase(object):
 
     def retrieveTicks(self, pair, start_time, end_time):
         pair_index = self.pair_to_index[pair]
-        sql = """select date, pair, ask_price, ask_volume, bid_price, bid_volume from ticks where pair = ? and date > ? and date < ?"""
-        for time, pair, ask_price, ask_volume, bid_price, bid_volume in self.cursor.execute(sql, (pair_index, start_time, end_time)):
-            yield time, self.index_to_pair[pair], ask_price, ask_volume, bid_price, bid_volume
+        sql = """select date, pair, ask_price, ask_volume, bid_price, bid_volume from ticks where pair == ? and date >= ? and date <= ?"""
+        for date, pair, ask_price, ask_volume, bid_price, bid_volume in self.cursor.execute(sql, (pair_index, start_time, end_time)):
+            yield datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f'), self.index_to_pair[pair], ask_price, ask_volume, bid_price, bid_volume
 
     def insertDepth(self, dt, pair, asks, bids):
         depth_data = (dt,
