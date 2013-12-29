@@ -157,8 +157,10 @@ class MarketDatabase(object):
     def retrieveTicks(self, pair, start_time, end_time):
         pair_index = self.pair_to_index[pair]
         sql = """select date, pair, ask_price, ask_volume, bid_price, bid_volume from ticks where pair == ? and date >= ? and date <= ?"""
+        ticks = []
         for date, pair, ask_price, ask_volume, bid_price, bid_volume in self.cursor.execute(sql, (pair_index, start_time, end_time)):
-            yield datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f'), self.index_to_pair[pair], ask_price, ask_volume, bid_price, bid_volume
+            ticks.append((datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f'), self.index_to_pair[pair], ask_price, ask_volume, bid_price, bid_volume))
+        return ticks
 
     def insertDepth(self, dt, pair, asks, bids):
         depth_data = (dt,
