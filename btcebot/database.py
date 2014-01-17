@@ -96,7 +96,7 @@ class MarketDatabase(object):
                 date DATETIME,
                 pair INT,
                 updated DATETIME,
-                server_time DATETIME
+                server_time DATETIME,
                 high_price REAL,
                 low_price REAL,
                 avg_price REAL,
@@ -162,7 +162,7 @@ class MarketDatabase(object):
 
     def retrieveTicks(self, pair, start_time, end_time):
         pair_index = self.pair_to_index[pair]
-        sql = """select date, pair, ask_price, ask_volume, bid_price, bid_volume from ticks where pair == ? and date >= ? and date <= ?"""
+        sql = """select date, pair, updated, server_time, high_price, low_price, avg_price, last_price, buy_price, sell_price, volume, current_volume from ticks where pair == ? and date >= ? and date <= ?"""
         ticks = []
         for date, pair, ask_price, ask_volume, bid_price, bid_volume in self.cursor.execute(sql, (pair_index, start_time, end_time)):
             ticks.append((datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f'), self.index_to_pair[pair], ask_price, ask_volume, bid_price, bid_volume))
