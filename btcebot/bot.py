@@ -43,18 +43,6 @@ def _runBot(bot):
             except:
                 bot.onTradeHistoryRetrievalError(p, traceback.format_exc())
 
-        ticker_pairs = set()
-        for handler, pairs in bot.tickerHandlers:
-            ticker_pairs.update(pairs)
-
-        ticks = {}
-        for p in ticker_pairs:
-            try:
-                response = btceapi.getTicker(p, conn)
-                ticks[p] = (datetime.datetime.now(), response)
-            except:
-                bot.onTickerRetrievalError(p, traceback.format_exc())
-
         conn.close()
 
         for p, (t, asks, bids) in depths.items():
@@ -77,14 +65,6 @@ def _runBot(bot):
                     except:
                         bot.onTradeHistoryHandlingError(p, handler, traceback.format_exc())
 
-        for p, (t, ticker) in ticks.items():
-            for handler, pairs in bot.tickerHandlers:
-                if p in pairs:
-                    try:
-                        handler(t, p, ticker)
-                    except:
-                        bot.onTickerHandlingError(p, handler, traceback.format_exc())
-
 
         # Tell all bots that have requested it that we're at the end
         # of an update loop.
@@ -104,6 +84,36 @@ def _runBot(bot):
         t.onExit()
 
 
+def _ticker_loop(bot):
+    while bot.running:
+        loop_start = time.time()
+
+        conn = btceapi.BTCEConnection()
+
+        ticker_pairs = set()
+        for handler, pairs in bot.tickerHandlers:
+            ticker_pairs.update(pairs)
+
+        ticks = {}
+        for p in ticker_pairs:
+            try:
+                response = btceapi.getTicker(p, conn)
+                ticks[p] = (datetime.datetime.now(), response)
+            except:
+                bot.onTickerRetrievalError(p, traceback.format_exc())
+
+        for p, (t, ticker) in ticks.items():
+            for handler, pairs in bot.tickerHandlers:
+                if p in pairs:
+                    try:
+                        handler(t, p, ticker)
+                    except:
+                        bot.onTickerHandlingError(p, handler, traceback.format_exc())
+
+        while bot.running and time.time() - loop_start < bot.tickerInterval:
+            time.sleep(0.1)
+
+
 class Bot(object):
     def __init__(self, bufferSpanMinutes=10):
         self.bufferSpanMinutes = bufferSpanMinutes
@@ -112,7 +122,10 @@ class Bot(object):
         self.tickerHandlers = []
         self.loopEndHandlers = []
         self.collectionInterval = 60.0
+        self.tickerInterval = 1.0
         self.running = False
+        self.thread = None
+        self.ticker_thread = None
         self.traders = set()
 
         self.tradeHistoryIds = {}
@@ -241,10 +254,11 @@ class Bot(object):
 
     def start(self):
         self.running = True
+        self.ticker_thread = threading.Thread(target=_ticker_loop, args=(self,))
         self.thread = threading.Thread(target=_runBot, args=(self,))
         self.thread.start()
 
     def stop(self):
         self.running = False
+        self.ticker_thread.join()
         self.thread.join()
-        
