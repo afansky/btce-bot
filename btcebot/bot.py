@@ -255,6 +255,7 @@ class Bot(object):
     def start(self):
         self.running = True
         self.ticker_thread = threading.Thread(target=_ticker_loop, args=(self,))
+        self.ticker_thread.start()
         self.thread = threading.Thread(target=_runBot, args=(self,))
         self.thread.start()
 
