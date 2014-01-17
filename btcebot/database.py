@@ -95,10 +95,16 @@ class MarketDatabase(object):
             CREATE TABLE ticks(
                 date DATETIME,
                 pair INT,
-                ask_price REAL,
-                ask_volume REAL,
-                bid_price REAL,
-                bid_volume REAL,
+                updated DATETIME,
+                server_time DATETIME
+                high_price REAL,
+                low_price REAL,
+                avg_price REAL,
+                last_price REAL,
+                buy_price REAL,
+                sell_price REAL,
+                volume REAL,
+                current_volume REAL,
                 FOREIGN KEY(pair) REFERENCES pairs(id)
         );''')
 
@@ -149,9 +155,9 @@ class MarketDatabase(object):
             row = dict(zip(vars, row))
             yield Trade(**row)
 
-    def insertTick(self, time, pair, ask_price, ask_volume, bid_price, bid_volume):
-        tick_data = (time, self.pair_to_index[pair], ask_price, ask_volume, bid_price, bid_volume)
-        self.cursor.execute("INSERT INTO ticks VALUES(?, ?, ?, ?, ?, ?)", tick_data)
+    def insertTick(self, time, pair, tick):
+        tick_data = (time, self.pair_to_index[pair], tick.updated, tick.server_time, tick.high, tick.low, tick.avg, tick.last, tick.buy, tick.sell, tick.vol, tick.vol_cur)
+        self.cursor.execute("INSERT INTO ticks VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tick_data)
         self.connection.commit()
 
     def retrieveTicks(self, pair, start_time, end_time):
