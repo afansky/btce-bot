@@ -10,37 +10,51 @@ from btceapi.common import validatePair
 
 from trader import TraderBase
 
+
 def _runBot(bot):
     while bot.running:
         loop_start = time.time()
-        
+
         # Collect the set of pairs for which we should get depth.
-        depthPairs = set()
+        depth_pairs = set()
         for handler, pairs in bot.depthHandlers:
-            depthPairs.update(pairs)
-            
+            depth_pairs.update(pairs)
+
         # Get current depth
         depths = {}
         conn = btceapi.BTCEConnection()
-        for p in depthPairs:
+        for p in depth_pairs:
             try:
                 asks, bids = btceapi.getDepth(p, conn)
                 depths[p] = (datetime.datetime.now(), asks, bids)
             except:
                 bot.onDepthRetrievalError(p, traceback.format_exc())
-                   
+
         # Collect the set of pairs for which we should get trade history.
-        tradeHistoryPairs = set()
+        trade_history_pairs = set()
         for handler, pairs in bot.tradeHistoryHandlers:
-            tradeHistoryPairs.update(pairs)
-        
-        tradeHistories = {}
-        for p in tradeHistoryPairs:
+            trade_history_pairs.update(pairs)
+
+        trade_histories = {}
+        for p in trade_history_pairs:
             try:
                 trades = btceapi.getTradeHistory(p, conn)
-                tradeHistories[p] = (datetime.datetime.now(), trades)
+                trade_histories[p] = (datetime.datetime.now(), trades)
             except:
                 bot.onTradeHistoryRetrievalError(p, traceback.format_exc())
+
+        ticker_pairs = set()
+        for handler, pairs in bot.tickerHandlers:
+            ticker_pairs.update(pairs)
+
+        ticks = {}
+        for p in ticker_pairs:
+            try:
+                response = btceapi.getTicker(p, conn)
+                ticks[p] = (datetime.datetime.now(), response)
+            except:
+                bot.onTickerRetrievalError(p, traceback.format_exc())
+
         conn.close()
 
         for p, (t, asks, bids) in depths.items():
@@ -50,11 +64,11 @@ def _runBot(bot):
                         handler(t, p, asks, bids)
                     except:
                         bot.onDepthHandlingError(p, handler, traceback.format_exc())
-       
-        for p, (t, trades) in tradeHistories.items():
+
+        for p, (t, trades) in trade_histories.items():
             # Merge new trades into the bot's history.
             bot.mergeTradeHistory(p, trades)
-            
+
             # Provide full history to traders
             for handler, pairs in bot.tradeHistoryHandlers:
                 if p in pairs:
@@ -62,7 +76,16 @@ def _runBot(bot):
                         handler(t, p, bot.tradeHistoryItems[p])
                     except:
                         bot.onTradeHistoryHandlingError(p, handler, traceback.format_exc())
-                        
+
+        for p, (t, ticker) in ticks.items():
+            for handler, pairs in bot.tickerHandlers:
+                if p in pairs:
+                    try:
+                        handler(t, p, ticker)
+                    except:
+                        bot.onTickerHandlingError(p, handler, traceback.format_exc())
+
+
         # Tell all bots that have requested it that we're at the end
         # of an update loop.
         for handler in bot.loopEndHandlers:
@@ -72,30 +95,31 @@ def _runBot(bot):
                 # TODO: refactor this somewhere
                 t = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                 print "%s Error while calling loop end handler (%r): %s" % (t, handler, traceback.format_exc())
-                
+
         while bot.running and time.time() - loop_start < bot.collectionInterval:
             time.sleep(0.5)
 
     # Give traders and opportunity to do thread-specific cleanup.
     for t in bot.traders:
         t.onExit()
-    
-            
+
+
 class Bot(object):
     def __init__(self, bufferSpanMinutes=10):
         self.bufferSpanMinutes = bufferSpanMinutes
         self.depthHandlers = []
         self.tradeHistoryHandlers = []
+        self.tickerHandlers = []
         self.loopEndHandlers = []
         self.collectionInterval = 60.0
         self.running = False
         self.traders = set()
-        
+
         self.tradeHistoryIds = {}
         self.tradeHistoryItems = {}
-        
+
         self.errorHandlers = []
-        
+
     def addErrorHandler(self, handler):
         '''Add a handler function taking two arguments: a string describing
         what operation was in process, and a string containing the
@@ -103,7 +127,7 @@ class Bot(object):
         it will be ignored.'''
         # TODO: inspect function to make sure it has
         # the right number of arguments.
-        self.errorHandlers.append(handler)    
+        self.errorHandlers.append(handler)
 
     def onDepthRetrievalError(self, pair, tracebackText):
         msg = "Error while retrieving %s depth" % pair
@@ -129,6 +153,14 @@ class Bot(object):
             except:
                 pass
 
+    def onTickerRetrievalError(self, pair, tracebackText):
+        msg = "Error while retrieving %s ticker" % pair
+        for h in self.errorHandlers:
+            try:
+                h(msg, tracebackText)
+            except:
+                pass
+
     def onTradeHistoryHandlingError(self, pair, handler, tracebackText):
         msg = "Error in handler %r for %s trade history" % (handler, pair)
         for h in self.errorHandlers:
@@ -136,15 +168,23 @@ class Bot(object):
                 h(msg, tracebackText)
             except:
                 pass
-        
+
+    def onTickerHandlingError(self, pair, handler, tracebackText):
+        msg = "Error in handler %r for %s ticker" % (handler, pair)
+        for h in self.errorHandlers:
+            try:
+                h(msg, tracebackText)
+            except:
+                pass
+
     def mergeTradeHistory(self, pair, history):
         keys = self.tradeHistoryIds.setdefault(pair, set())
         prevItems = self.tradeHistoryItems.get(pair, [])
         newItems = []
-        
+
         # Remove old items
         now = datetime.datetime.now()
-        dt = datetime.timedelta(minutes = self.bufferSpanMinutes)
+        dt = datetime.timedelta(minutes=self.bufferSpanMinutes)
         for h in prevItems:
             if h.date - now > dt:
                 keys.remove(h.tid)
@@ -159,42 +199,51 @@ class Bot(object):
                 newItems.append(h)
 
         self.tradeHistoryItems[pair] = newItems
-        
+
     def addTrader(self, trader):
         if trader.onNewDepth.__func__ is not TraderBase.onNewDepth.__func__:
             self.addDepthHandler(trader.onNewDepth, trader.pairs)
-            
+
         if trader.onNewTradeHistory.__func__ is not TraderBase.onNewTradeHistory.__func__:
             self.addTradeHistoryHandler(trader.onNewTradeHistory, trader.pairs)
 
+        if trader.onNewTicker.__func__ is not TraderBase.onNewTicker.__func__:
+            self.addTickerHandler(trader.onNewTicker, trader.pairs)
+
         if trader.onLoopEnd.__func__ is not TraderBase.onLoopEnd.__func__:
             self.addLoopEndHandler(trader.onLoopEnd)
-            
+
         self.traders.add(trader)
-        
+
     def addDepthHandler(self, handler, pairs=btceapi.all_pairs):
         for p in pairs:
             validatePair(p)
-          
+
         self.depthHandlers.append((handler, pairs))
-        
+
     def addTradeHistoryHandler(self, handler, pairs=btceapi.all_pairs):
         for p in pairs:
             validatePair(p)
 
         self.tradeHistoryHandlers.append((handler, pairs))
-        
+
+    def addTickerHandler(self, handler, pairs=btceapi.all_pairs):
+        for p in pairs:
+            validatePair(p)
+
+        self.tickerHandlers.append((handler, pairs))
+
     def addLoopEndHandler(self, handler):
         self.loopEndHandlers.append(handler)
 
     def setCollectionInterval(self, interval_seconds):
         self.collectionInterval = interval_seconds
-        
+
     def start(self):
         self.running = True
-        self.thread = threading.Thread(target = _runBot, args=(self,))
+        self.thread = threading.Thread(target=_runBot, args=(self,))
         self.thread.start()
-        
+
     def stop(self):
         self.running = False
         self.thread.join()
