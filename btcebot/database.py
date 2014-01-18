@@ -174,12 +174,8 @@ class MarketDatabase(object):
         self.db.ticks.insert(tick_hash)
 
     def retrieveTicks(self, pair, start_time, end_time):
-        pair_index = self.pair_to_index[pair]
-        sql = """select date, pair, updated, server_time, high_price, low_price, avg_price, last_price, buy_price, sell_price, volume, current_volume from ticks where pair == ? and date >= ? and date <= ?"""
-        ticks = []
-        for date, pair, updated, server_time, high_price, low_price, avg_price, last_price, buy_price, sell_price, volume, current_volume in self.cursor.execute(sql, (pair_index, start_time, end_time)):
-            ticks.append((datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f'), self.index_to_pair[pair], updated, server_time, high_price, low_price, avg_price, last_price, buy_price, sell_price, volume, current_volume))
-        return ticks
+        ticks = self.db.ticks.find({"pair": pair, "time": {"$gte": start_time, "$lte": end_time}})
+        return list(ticks)
 
     def insertDepth(self, dt, pair, asks, bids):
         depth_data = (dt,
