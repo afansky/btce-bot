@@ -5,10 +5,19 @@ import datetime
 import decimal
 import os.path
 import sqlite3
+import threading
 import time
 
 import btceapi
 from btceapi.public import Trade
+
+from pymongo import MongoClient
+
+# engine = create_engine('mysql://scott:tiger@localhost/test')
+# session_factory = sessionmaker(bind=engine)
+# Session = scoped_session(session_factory)
+
+
 
 # Add support for conversion to/from decimal
 def adapt_decimal(d):
@@ -25,6 +34,8 @@ sqlite3.register_converter("DECIMAL", convert_decimal)
 
 class MarketDatabase(object):
     def __init__(self, database_path):
+        self.client = MongoClient('mongodb://192.168.1.102:27017/')
+        self.db = self.client.tradebot
         create = not os.path.isfile(database_path)
         self.connection = sqlite3.connect(database_path)
         self.cursor = self.connection.cursor()
@@ -156,9 +167,11 @@ class MarketDatabase(object):
             yield Trade(**row)
 
     def insertTick(self, time, pair, tick):
-        tick_data = (time, self.pair_to_index[pair], tick.updated, tick.server_time, tick.high, tick.low, tick.avg, tick.last, tick.buy, tick.sell, tick.vol, tick.vol_cur)
-        self.cursor.execute("INSERT INTO ticks VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tick_data)
-        self.connection.commit()
+        tick_hash = {"time": time, "pair": pair, "updated": tick.updated, "server_time": tick.server_time,
+                     "high": float(tick.high), "low": float(tick.low), "avg": float(tick.avg), "last": float(tick.last),
+                     "buy": float(tick.buy), "sell": float(tick.sell), "vol": float(tick.vol),
+                     "vol_cur": float(tick.vol_cur)}
+        self.db.ticks.insert(tick_hash)
 
     def retrieveTicks(self, pair, start_time, end_time):
         pair_index = self.pair_to_index[pair]
