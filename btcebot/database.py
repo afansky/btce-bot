@@ -38,6 +38,10 @@ class MarketDatabase(object):
         ticks = self.db.ticks.find({"pair": pair, "time": {"$gte": start_time, "$lte": end_time}})
         return list(ticks)
 
+    def retrieve_ticks_timestamps(self, pair):
+        timestamps = self.db.ticks.find({'pair': pair}, {'time': 1}).sort('time', 1)
+        return list(timestamps)
+
     def insert_depth(self, dt, pair, asks, bids):
         pass
 
