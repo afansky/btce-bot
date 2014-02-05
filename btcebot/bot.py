@@ -74,7 +74,7 @@ def _runBot(bot):
             except:
                 # TODO: refactor this somewhere
                 t = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                print "%s Error while calling loop end handler (%r): %s" % (t, handler, traceback.format_exc())
+                print("%s Error while calling loop end handler (%r): %s" % (t, handler, traceback.format_exc()))
 
         while bot.running and time.time() - loop_start < bot.collectionInterval:
             time.sleep(0.5)
