@@ -2,6 +2,8 @@
 
 import decimal
 from pymongo import MongoClient
+import csv
+import pandas as pd
 
 
 # Add support for conversion to/from decimal
@@ -28,11 +30,14 @@ class MarketDatabase(object):
         pass
 
     def insert_tick(self, time, pair, tick):
+        tick_hash = {k: lambda v: v if not isinstance(v, decimal.Decimal) else str(v) for k, v in tick.items()}
+        tick_hash["time"] = time
+
         tick_hash = {"time": time, "pair": pair, "updated": tick.updated, "server_time": tick.server_time,
                      "high": float(tick.high), "low": float(tick.low), "avg": float(tick.avg), "last": float(tick.last),
                      "buy": float(tick.buy), "sell": float(tick.sell), "vol": float(tick.vol),
                      "vol_cur": float(tick.vol_cur)}
-        self.db.ticks.insert(tick_hash)
+        # self.db.ticks.insert(tick_hash)
 
     def retrieve_ticks(self, pair, start_time, end_time):
         ticks = self.db.ticks.find({"pair": pair, "time": {"$gte": start_time, "$lte": end_time}},
@@ -48,3 +53,14 @@ class MarketDatabase(object):
 
     def retrieve_depth(self, start_date, end_date, pair):
         pass
+
+
+class CsvDatabase(object):
+    def __init__(self):
+        pass
+
+    def retrieve_ticks(self, pair, start_time, end_time):
+        df = pd.read_csv('../../data/small.csv', header=None, sep=",", names=['time', 'last', 'volume'], parse_dates=[1], index_col=0)
+        df['last'] = pd.to_numeric(df['last'])
+        # df['time'] = pd.to_datetime(df['time'], unit='s')
+        return df
