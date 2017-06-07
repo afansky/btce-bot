@@ -4,6 +4,7 @@ import decimal
 from pymongo import MongoClient
 import csv
 import pandas as pd
+from datetime import datetime
 
 
 # Add support for conversion to/from decimal
@@ -60,7 +61,20 @@ class CsvDatabase(object):
         pass
 
     def retrieve_ticks(self, pair, start_time, end_time):
-        df = pd.read_csv('../../data/small.csv', header=None, sep=",", names=['time', 'last', 'volume'], parse_dates=[1], index_col=0)
+        df = pd.read_csv('../../data/large.csv', header=None, sep=",", names=['time', 'last', 'volume'],
+                         parse_dates=True, date_parser=dateparse, index_col=0)
         df['last'] = pd.to_numeric(df['last'])
-        # df['time'] = pd.to_datetime(df['time'], unit='s')
-        return df
+        # df = df.groupby('time').last()
+        df = df.resample('30T').last().ffill()
+        size = len(df.index)
+        train = df.head(int(size * 0.6))
+
+        test = df.tail(int(size * 0.4))
+        cv = test.tail(int(size * 0.2))
+        test = test.head(int(size * 0.2))
+
+        return train, cv, test
+
+
+def dateparse(time_in_secs):
+    return datetime.fromtimestamp(float(time_in_secs))
